@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: snake-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-snake_game_db}
+      MYSQL_USER: ${MYSQL_USER:-snake_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-snake_password}
+    ports:
+      - "${MYSQL_PORT:-3308}:3306"  # CHANGED from 3307 to 3308
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - snake-network
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: snake-phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 128M
+    ports:
+      - "${PHPMYADMIN_PORT:-8081}:80"  # CHANGED from 8080 to 8081
+    depends_on:
+      - mysql
+    networks:
+      - snake-network
+    restart: unless-stopped
+
+  snake-server:
+    build: .
+    container_name: snake-server
+    ports:
+      - "${SERVER_PORT:-10001}:10000"  # CHANGED from 10000 to 10001
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-snake_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-snake_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-snake_game_db}
+    volumes:
+      - ./static:/app/static
+      - ./server.py:/app/server.py
+      - ./logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - snake-network
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+  redis:
+    image: redis:7-alpine
+    container_name: snake-redis
+    ports:
+      - "${REDIS_PORT:-6380}:6379"  # CHANGED from 6379 to 6380
+    volumes:
+      - redis_data:/data
+    networks:
+      - snake-network
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  snake-network:
+    driver: bridge
